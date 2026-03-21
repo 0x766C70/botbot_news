@@ -24,9 +24,11 @@ if [ $# -lt 3 ]; then
     exit 1
 fi
 
+LIBRARY_ID=""
 case "$2" in
     "botbot_fdn")
         AGENT_ID="ag:00bd343b:20251002:botbot-fdn:7a3e7bdb"
+        LIBRARY_ID="019d0fa1-1718-74ed-af19-cc625502bd86"
         ;;
     "botbot_mifa")
         AGENT_ID="ag:00bd343b:20251010:mifa-bot:d61e378c"
@@ -57,11 +59,12 @@ else
         --arg speaker "$speaker" \
         --arg message "$message" \
         --arg agent_id "$AGENT_ID" \
+        --arg library_id "$LIBRARY_ID" \
         '{
             inputs: "Nous sommes le \($today) et ton interlocuteur est \($speaker). Il te dit: \($message)",
             stream: false,
             agent_id: $agent_id
-        }')
+        } + (if $library_id != "" then {tools: [{type: "document_library", library_ids: [$library_id]}]} else {} end)')
 fi
 
 # Exécution de la requête
