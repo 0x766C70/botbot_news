@@ -59,13 +59,13 @@ else
         --arg speaker "$speaker" \
         --arg message "$message" \
         --arg agent_id "$AGENT_ID" \
-        --arg library_id "$LIBRARY_ID" \
         '{
             inputs: "Nous sommes le \($today) et ton interlocuteur est \($speaker). Il te dit: \($message)",
             stream: false,
             agent_id: $agent_id
-        } + (if $library_id != "" then {tools: [{type: "document_library", library_ids: [$library_id]}]} else {} end)')
+	}')
 fi
+echo "Request body: $REQUEST_BODY" >&2
 
 # Exécution de la requête
 response=$(curl -s --location "$API_URL" \
