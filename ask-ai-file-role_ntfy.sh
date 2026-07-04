@@ -5,6 +5,8 @@ set -euo pipefail  # Exit on error, undefined vars, or pipe failures
 API_URL="https://api.infomaniak.com/2/ai/108574/openai/v1/chat/completions"
 API_TOKEN="${INFOMANIAK_AI_TOKEN:-YOUR-TOKEN-HERE}"
 MODEL="qwen3"
+NTFY_URL="https://ntfy.vlp.fdn.fr/botbot_talk"
+NTFY_USER="botbot"
 
 # Resolve the directory where the script is located
 # This ensures role.txt is found even if you run the script from elsewhere
@@ -35,12 +37,28 @@ validate_inputs() {
         echo "Please create a role.txt file in the script's directory." >&2
         exit 1
     fi
+
+    if [[ -z "${ntfy_botbotpass:-}" ]]; then
+        echo "Error: Environment variable 'ntfy_botbotpass' is required." >&2
+        exit 1
+    fi
 }
 
 # Helper to escape JSON strings properly
 escape_json() {
     # Reads raw input from stdin and outputs a valid JSON string
     jq -Rs '.'
+}
+
+send_ntfy_alert() {
+    local message="$1"
+
+    if ! printf '%s' "${message}" | curl -fsS -u "${NTFY_USER}:${ntfy_botbotpass}" \
+        --data-binary @- \
+        "${NTFY_URL}" > /dev/null; then
+        echo "Error: Failed to send ntfy alert." >&2
+        exit 1
+    fi
 }
 
 # Main logic
@@ -95,6 +113,8 @@ main() {
         echo "Raw response: ${response}" >&2
         exit 1
     fi
+
+    send_ntfy_alert "${answer}"
 
     echo "${answer}"
 }
