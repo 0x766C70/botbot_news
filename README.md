@@ -1,65 +1,79 @@
 # botbot_script
 
-A Bash script that sends messages to [Mistral AI](https://mistral.ai/) agents via their Conversations API, with support for multi-turn conversations.
+A Bash script that sends messages to a conversational AI agent (botbot) via the [Infomaniak AI API](https://www.infomaniak.com/), with optional push notifications via [ntfy](https://ntfy.sh/).
 
 ## Requirements
 
 - `bash` (≥ 4)
 - [`curl`](https://curl.se/)
 - [`jq`](https://stedolan.github.io/jq/)
-- A valid [Mistral AI API key](https://console.mistral.ai/)
+- A valid [Infomaniak AI API token](https://manager.infomaniak.com/)
+- An ntfy server (only required if using the `-ntfy` flag)
+
+## Configuration
+
+The script reads credentials from `~/.config/botbot/config.json`. Create it with the following structure:
+
+```json
+{
+  "llm": [
+    {
+      "infomaniak": "your_infomaniak_api_token_here"
+    }
+  ],
+  "ntfy": "your_ntfy_password_here"
+}
+```
+
+You can also override the Infomaniak token at runtime with the `INFOMANIAK_AI_TOKEN` environment variable:
+
+```bash
+export INFOMANIAK_AI_TOKEN="your_token_here"
+```
+
+The script will exit with an error if the config file is missing or incomplete.
+
+### Role file
+
+The agent's personality and instructions are loaded from `role.txt`, located in the same directory as the script. The script will exit with an error if this file is missing.
 
 ## Usage
 
 ```bash
-./agent2.2.sh <speaker> <brain> <message> [conversation_id]
+./botbot.sh [-ntfy] [-u <username>] "Your message here"
 ```
 
-### Arguments
+### Flags
 
-| Argument          | Required | Description                                                                 |
-|-------------------|----------|-----------------------------------------------------------------------------|
-| `speaker`         | Yes      | Name of the person sending the message (e.g. `alice`)                      |
-| `brain`           | Yes      | Agent to use. One of: `botbot_fdn`, `botbot_mifa`                          |
-| `message`         | Yes      | The message to send to the agent                                            |
-| `conversation_id` | No       | Existing conversation ID to continue a previous conversation                |
+| Flag              | Required | Description                                                        |
+|-------------------|----------|--------------------------------------------------------------------|
+| `-ntfy`           | No       | Send the agent's reply to the configured ntfy topic instead of stdout |
+| `-u <username>`   | No       | Identify yourself to the agent (default: `vlp`)                   |
+| `"message"`       | Yes      | The message to send to the agent                                   |
 
 ### Output
 
-The script outputs a JSON object with the following fields:
-
-```json
-{
-  "message": "<agent reply>",
-  "conv": "<conversation_id>"
-}
-```
-
-Pass the returned `conv` value as the fourth argument to continue the same conversation on subsequent calls.
+By default the script prints the agent's reply to stdout. With `-ntfy`, the reply is pushed to the configured ntfy topic instead.
 
 ## Examples
 
-**Start a new conversation:**
+**Ask a question as the default user:**
 
 ```bash
-./agent2.2.sh alice botbot_fdn "Hello, how are you?"
+./botbot.sh "Quelle est la météo à Paris ?"
 ```
 
-**Continue an existing conversation:**
+**Ask a question as a specific user:**
 
 ```bash
-./agent2.2.sh alice botbot_fdn "Tell me more." "conv_abc123"
+./botbot.sh -u albane "Raconte-moi une blague."
 ```
 
-## Configuration
-
-The script reads your Mistral AI API key from the `MISTRAL_API_KEY` environment variable. Export it before running the script:
+**Send the reply to ntfy instead of stdout:**
 
 ```bash
-export MISTRAL_API_KEY="your_api_key_here"
+./botbot.sh -ntfy -u garance "C'est quoi le programme ce soir ?"
 ```
-
-The script will exit with an error if the variable is not set.
 
 ## License
 
