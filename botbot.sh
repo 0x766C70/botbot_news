@@ -3,10 +3,12 @@ set -euo pipefail  # Exit on error, undefined vars, or pipe failures
 
 # Configuration
 API_URL="https://api.infomaniak.com/2/ai/108574/openai/v1/chat/completions"
-API_TOKEN="${INFOMANIAK_AI_TOKEN:-YOUR-TOKEN-HERE}"
+API_TOKEN=""        # Populated by load_config
 MODEL="qwen3"
 NTFY_URL="https://ntfy.vlp.fdn.fr/botbot_talk"
 NTFY_USER="botbot"
+NTFY_PASS=""        # Populated by load_config
+CONFIG_FILE="${HOME}/.config/botbot/config.json"
 
 # Resolve the directory where the script is located
 # This ensures role.txt is found even if you run the script from elsewhere
@@ -25,6 +27,34 @@ check_deps() {
     fi
 }
 
+# Function to load credentials from the JSON config file
+# Expects: ~/.config/botbot/config.json with keys .llm[0].infomaniak and .ntfy
+load_config() {
+    if [[ ! -f "${CONFIG_FILE}" ]]; then
+        echo "Error: Config file not found at '${CONFIG_FILE}'." >&2
+        echo "Please create it with your LLM token and ntfy password." >&2
+        exit 1
+    fi
+
+    # Extract the Infomaniak API token; allow INFOMANIAK_AI_TOKEN env-var override
+    local token
+    token=$(jq -r '.llm[0].infomaniak // empty' "${CONFIG_FILE}")
+    if [[ -z "${token}" ]]; then
+        echo "Error: Could not read '.llm[0].infomaniak' from '${CONFIG_FILE}'." >&2
+        exit 1
+    fi
+    API_TOKEN="${INFOMANIAK_AI_TOKEN:-${token}}"
+
+    # Extract the ntfy password
+    local ntfy_pass
+    ntfy_pass=$(jq -r '.ntfy // empty' "${CONFIG_FILE}")
+    if [[ -z "${ntfy_pass}" ]]; then
+        echo "Error: Could not read '.ntfy' from '${CONFIG_FILE}'." >&2
+        exit 1
+    fi
+    NTFY_PASS="${ntfy_pass}"
+}
+
 # Function to validate inputs and files
 # Arguments: <use_ntfy> <user_message>
 validate_inputs() {
@@ -41,12 +71,6 @@ validate_inputs() {
         echo "Please create a role.txt file in the script's directory." >&2
         exit 1
     fi
-
-    # ntfy password is only needed when sending to the ntfy service
-    if [[ "${use_ntfy}" == "true" ]] && [[ -z "${ntfy_botbotpass:-}" ]]; then
-        echo "Error: Environment variable 'ntfy_botbotpass' is required when using -ntfy." >&2
-        exit 1
-    fi
 }
 
 # Helper to escape JSON strings properly
@@ -58,7 +82,7 @@ escape_json() {
 send_ntfy_alert() {
     local message="$1"
 
-    if ! printf '%s' "${message}" | curl -fsS -u "${NTFY_USER}:${ntfy_botbotpass}" \
+    if ! printf '%s' "${message}" | curl -fsS -u "${NTFY_USER}:${NTFY_PASS}" \
         --data-binary @- \
         "${NTFY_URL}" > /dev/null; then
         echo "Error: Failed to send ntfy alert." >&2
@@ -104,6 +128,7 @@ parse_args() {
 # Main logic
 main() {
     check_deps
+    load_config
     parse_args "$@"
     validate_inputs "${USE_NTFY}" "${USER_MESSAGE}"
 
