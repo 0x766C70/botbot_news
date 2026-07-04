@@ -116,7 +116,6 @@ main() {
 
     send_ntfy_alert "${answer}"
 
-    echo "${answer}"
 }
 
 main "$@"
