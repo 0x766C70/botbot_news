@@ -26,9 +26,13 @@ check_deps() {
 }
 
 # Function to validate inputs and files
+# Arguments: <use_ntfy> <user_message>
 validate_inputs() {
-    if [[ -z "${1:-}" ]]; then
-        echo "Usage: $0 \"Your question here\"" >&2
+    local use_ntfy="$1"
+    local user_message="$2"
+
+    if [[ -z "${user_message}" ]]; then
+        echo "Usage: $0 [-ntfy] [-u <username>] \"Your question here\"" >&2
         exit 1
     fi
 
@@ -38,8 +42,9 @@ validate_inputs() {
         exit 1
     fi
 
-    if [[ -z "${ntfy_botbotpass:-}" ]]; then
-        echo "Error: Environment variable 'ntfy_botbotpass' is required." >&2
+    # ntfy password is only needed when sending to the ntfy service
+    if [[ "${use_ntfy}" == "true" ]] && [[ -z "${ntfy_botbotpass:-}" ]]; then
+        echo "Error: Environment variable 'ntfy_botbotpass' is required when using -ntfy." >&2
         exit 1
     fi
 }
@@ -61,27 +66,65 @@ send_ntfy_alert() {
     fi
 }
 
+# Parse command-line flags
+# Supports: -ntfy (send output to ntfy), -u <username> (set user identity, default: vlp)
+parse_args() {
+    USE_NTFY="false"
+    CURRENT_USER="vlp"
+    USER_MESSAGE=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -ntfy)
+                USE_NTFY="true"
+                shift
+                ;;
+            -u)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: -u requires a username argument." >&2
+                    exit 1
+                fi
+                CURRENT_USER="$2"
+                shift 2
+                ;;
+            -*)
+                echo "Error: Unknown flag '$1'." >&2
+                echo "Usage: $0 [-ntfy] [-u <username>] \"Your question here\"" >&2
+                exit 1
+                ;;
+            *)
+                # Everything that's not a flag is the user message
+                USER_MESSAGE="$1"
+                shift
+                ;;
+        esac
+    done
+}
+
 # Main logic
 main() {
     check_deps
-    validate_inputs "$1"
+    parse_args "$@"
+    validate_inputs "${USE_NTFY}" "${USER_MESSAGE}"
 
-    local user_message="$1"
-    
     # Read the role from the file
     # We use cat to read the whole file content
     local system_prompt
     system_prompt=$(cat "${ROLE_FILE}")
 
+    # Prepend the current user's identity so the LLM knows who it's talking to
+    local full_message="[L'utilisateur qui te parle est ${CURRENT_USER}] ${USER_MESSAGE}"
+
     # Escape both prompts to ensure valid JSON
     # This handles newlines, quotes, and special characters safely
     local escaped_system
     local escaped_user
-    
-    escaped_system=$(echo "${system_prompt}" | escape_json)
-    escaped_user=$(echo "${user_message}" | escape_json)
+
+    escaped_system=$(printf '%s' "${system_prompt}" | escape_json)
+    escaped_user=$(printf '%s' "${full_message}" | escape_json)
 
     # Send the request
+    local response
     response=$(curl -s -X POST \
         -H "Authorization: Bearer ${API_TOKEN}" \
         -H "Content-Type: application/json" \
@@ -106,7 +149,8 @@ main() {
     fi
 
     # Extract the content
-    answer=$(echo "${response}" | jq -r '.choices[0].message.content // empty')
+    local answer
+    answer=$(printf '%s' "${response}" | jq -r '.choices[0].message.content // empty')
 
     if [[ -z "${answer}" ]]; then
         echo "Error: Could not extract answer. API might have returned an error." >&2
@@ -114,8 +158,12 @@ main() {
         exit 1
     fi
 
-    send_ntfy_alert "${answer}"
-
+    # Output: send to ntfy service if -ntfy was given, otherwise print to terminal
+    if [[ "${USE_NTFY}" == "true" ]]; then
+        send_ntfy_alert "${answer}"
+    else
+        printf '%s\n' "${answer}"
+    fi
 }
 
 main "$@"
