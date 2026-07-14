@@ -5,7 +5,7 @@ set -euo pipefail  # Exit on error, undefined vars, or pipe failures
 API_URL="https://api.infomaniak.com/2/ai/108574/openai/v1/chat/completions"
 API_TOKEN=""        # Populated by load_config
 MODEL="qwen3"
-NTFY_URL="https://ntfy.vlp.fdn.fr/botbot_talk"
+NTFY_URL="https://ntfy.766c70.com/botbot_talk"
 NTFY_USER="botbot"
 NTFY_PASS=""        # Populated by load_config
 CONFIG_FILE="${HOME}/.config/botbot/config.json"
