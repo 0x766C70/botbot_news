@@ -9,6 +9,7 @@ A Bash script that sends messages to a conversational AI agent (botbot) via the 
 - [`jq`](https://stedolan.github.io/jq/)
 - A valid [Infomaniak AI API token](https://manager.infomaniak.com/)
 - An ntfy server (only required if using the `-ntfy` flag)
+- `ii` (only required if using the `-irc` flag)
 
 ## Configuration
 
@@ -40,7 +41,7 @@ The agent's personality and instructions are loaded from `role.txt`, located in 
 ## Usage
 
 ```bash
-./botbot.sh [-ntfy] [-u <username>] "Your message here"
+./botbot.sh [-ntfy|-irc] [-u <username>] "Your message here"
 ```
 
 ### Flags
@@ -48,12 +49,13 @@ The agent's personality and instructions are loaded from `role.txt`, located in 
 | Flag              | Required | Description                                                        |
 |-------------------|----------|--------------------------------------------------------------------|
 | `-ntfy`           | No       | Send the agent's reply to the configured ntfy topic instead of stdout |
+| `-irc`            | No       | Send the agent's reply to `irc.geeknode.org` in `#fdn` via `ii`   |
 | `-u <username>`   | No       | Identify yourself to the agent (default: `vlp`)                   |
 | `"message"`       | Yes      | The message to send to the agent                                   |
 
 ### Output
 
-By default the script prints the agent's reply to stdout. With `-ntfy`, the reply is pushed to the configured ntfy topic instead.
+By default the script prints the agent's reply to stdout. With `-ntfy`, the reply is pushed to the configured ntfy topic instead. With `-irc`, the reply is written to the `ii` channel input at `~/irc/irc.geeknode.org/fdn/in`.
 
 ## Examples
 
@@ -73,6 +75,12 @@ By default the script prints the agent's reply to stdout. With `-ntfy`, the repl
 
 ```bash
 ./botbot.sh -ntfy -u garance "C'est quoi le programme ce soir ?"
+```
+
+**Send the reply to IRC (`#fdn` on `irc.geeknode.org`):**
+
+```bash
+./botbot.sh -irc -u garance "C'est quoi le programme ce soir ?"
 ```
 
 ## License

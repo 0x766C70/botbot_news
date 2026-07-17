@@ -8,6 +8,9 @@ MODEL="qwen3"
 NTFY_URL="https://ntfy.766c70.com/botbot_talk"
 NTFY_USER="botbot"
 NTFY_PASS=""        # Populated by load_config
+IRC_SERVER="irc.geeknode.org"
+IRC_CHANNEL="fdn"
+II_BASE_DIR="${HOME}/irc"
 CONFIG_FILE="${HOME}/.config/botbot/config.json"
 
 # Resolve the directory where the script is located
@@ -28,11 +31,13 @@ check_deps() {
 }
 
 # Function to load credentials from the JSON config file
-# Expects: ~/.config/botbot/config.json with keys .llm[0].infomaniak and .ntfy
+# Expects: ~/.config/botbot/config.json with key .llm[0].infomaniak and optional .ntfy
 load_config() {
+    local use_ntfy="$1"
+
     if [[ ! -f "${CONFIG_FILE}" ]]; then
         echo "Error: Config file not found at '${CONFIG_FILE}'." >&2
-        echo "Please create it with your LLM token and ntfy password." >&2
+        echo "Please create it with your LLM token and optional ntfy password." >&2
         exit 1
     fi
 
@@ -45,24 +50,32 @@ load_config() {
     fi
     API_TOKEN="${INFOMANIAK_AI_TOKEN:-${token}}"
 
-    # Extract the ntfy password
-    local ntfy_pass
-    ntfy_pass=$(jq -r '.ntfy // empty' "${CONFIG_FILE}")
-    if [[ -z "${ntfy_pass}" ]]; then
-        echo "Error: Could not read '.ntfy' from '${CONFIG_FILE}'." >&2
-        exit 1
+    # Extract the ntfy password only if needed
+    if [[ "${use_ntfy}" == "true" ]]; then
+        local ntfy_pass
+        ntfy_pass=$(jq -r '.ntfy // empty' "${CONFIG_FILE}")
+        if [[ -z "${ntfy_pass}" ]]; then
+            echo "Error: Could not read '.ntfy' from '${CONFIG_FILE}'." >&2
+            exit 1
+        fi
+        NTFY_PASS="${ntfy_pass}"
     fi
-    NTFY_PASS="${ntfy_pass}"
 }
 
 # Function to validate inputs and files
-# Arguments: <use_ntfy> <user_message>
+# Arguments: <use_ntfy> <use_irc> <user_message>
 validate_inputs() {
     local use_ntfy="$1"
-    local user_message="$2"
+    local use_irc="$2"
+    local user_message="$3"
 
     if [[ -z "${user_message}" ]]; then
-        echo "Usage: $0 [-ntfy] [-u <username>] \"Your question here\"" >&2
+        echo "Usage: $0 [-ntfy|-irc] [-u <username>] \"Your question here\"" >&2
+        exit 1
+    fi
+
+    if [[ "${use_ntfy}" == "true" && "${use_irc}" == "true" ]]; then
+        echo "Error: -ntfy and -irc cannot be used together." >&2
         exit 1
     fi
 
@@ -90,10 +103,26 @@ send_ntfy_alert() {
     fi
 }
 
+send_irc_message() {
+    local message="$1"
+    local channel_in_file="${II_BASE_DIR}/${IRC_SERVER}/${IRC_CHANNEL}/in"
+
+    if [[ ! -w "${channel_in_file}" ]]; then
+        echo "Error: ii channel input not writable at '${channel_in_file}'." >&2
+        echo "Start ii and join #${IRC_CHANNEL} on ${IRC_SERVER} first." >&2
+        exit 1
+    fi
+
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        printf '%s\n' "${line}"
+    done <<< "${message}" > "${channel_in_file}"
+}
+
 # Parse command-line flags
-# Supports: -ntfy (send output to ntfy), -u <username> (set user identity, default: vlp)
+# Supports: -ntfy (send output to ntfy), -irc (send output to IRC), -u <username> (default: vlp)
 parse_args() {
     USE_NTFY="false"
+    USE_IRC="false"
     CURRENT_USER="vlp"
     USER_MESSAGE=""
 
@@ -101,6 +130,10 @@ parse_args() {
         case "$1" in
             -ntfy)
                 USE_NTFY="true"
+                shift
+                ;;
+            -irc)
+                USE_IRC="true"
                 shift
                 ;;
             -u)
@@ -113,7 +146,7 @@ parse_args() {
                 ;;
             -*)
                 echo "Error: Unknown flag '$1'." >&2
-                echo "Usage: $0 [-ntfy] [-u <username>] \"Your question here\"" >&2
+                echo "Usage: $0 [-ntfy|-irc] [-u <username>] \"Your question here\"" >&2
                 exit 1
                 ;;
             *)
@@ -128,9 +161,9 @@ parse_args() {
 # Main logic
 main() {
     check_deps
-    load_config
     parse_args "$@"
-    validate_inputs "${USE_NTFY}" "${USER_MESSAGE}"
+    load_config "${USE_NTFY}"
+    validate_inputs "${USE_NTFY}" "${USE_IRC}" "${USER_MESSAGE}"
 
     # Read the role from the file
     # We use cat to read the whole file content
@@ -183,9 +216,11 @@ main() {
         exit 1
     fi
 
-    # Output: send to ntfy service if -ntfy was given, otherwise print to terminal
+    # Output: send to ntfy/irc service if requested, otherwise print to terminal
     if [[ "${USE_NTFY}" == "true" ]]; then
         send_ntfy_alert "${answer}"
+    elif [[ "${USE_IRC}" == "true" ]]; then
+        send_irc_message "${answer}"
     else
         printf '%s\n' "${answer}"
     fi
