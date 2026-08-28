@@ -22,7 +22,10 @@ The script reads credentials from `~/.config/botbot/config.json`. Create it with
       "infomaniak": "your_infomaniak_api_token_here"
     }
   ],
-  "ntfy": "your_ntfy_password_here"
+  "ntfy": "your_ntfy_password_here",
+  "rss": {
+    "token": "your_miniflux_api_token_here"
+  }
 }
 ```
 
@@ -42,6 +45,7 @@ The agent's personality and instructions are loaded from `role.txt`, located in 
 
 ```bash
 ./botbot.sh [-ntfy|-irc] [-u <username>] "Your message here"
+./botbot.sh -rss [-ntfy|-irc]
 ```
 
 ### Flags
@@ -50,8 +54,9 @@ The agent's personality and instructions are loaded from `role.txt`, located in 
 |-------------------|----------|--------------------------------------------------------------------|
 | `-ntfy`           | No       | Send the agent's reply to the configured ntfy topic instead of stdout |
 | `-irc`            | No       | Send the agent's reply to `irc.geeknode.org` in `#fdn` via `ii`   |
+| `-rss`            | No       | Fetch unread entries from the Miniflux server and send an LLM digest |
 | `-u <username>`   | No       | Identify yourself to the agent (default: `vlp`)                   |
-| `"message"`       | Yes      | The message to send to the agent                                   |
+| `"message"`       | Yes*     | The message to send to the agent (*not required with `-rss`)       |
 
 ### Output
 
@@ -81,6 +86,24 @@ By default the script prints the agent's reply to stdout. With `-ntfy`, the repl
 
 ```bash
 ./botbot.sh -irc -u garance "C'est quoi le programme ce soir ?"
+```
+
+**Fetch an RSS digest to stdout:**
+
+```bash
+./botbot.sh -rss
+```
+
+**Fetch an RSS digest and push it to ntfy:**
+
+```bash
+./botbot.sh -rss -ntfy
+```
+
+**Fetch an RSS digest and post it to IRC:**
+
+```bash
+./botbot.sh -rss -irc
 ```
 
 ## License

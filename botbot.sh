@@ -12,6 +12,8 @@ IRC_SERVER="irc.geeknode.org"
 IRC_CHANNEL="fdn"
 II_BASE_DIR="${HOME}/irc"
 CONFIG_FILE="${HOME}/.config/botbot/config.json"
+RSS_URL="https://rss.766c70.com"
+RSS_TOKEN=""        # Populated by load_config
 
 # Resolve the directory where the script is located
 # This ensures role.txt is found even if you run the script from elsewhere
@@ -31,9 +33,10 @@ check_deps() {
 }
 
 # Function to load credentials from the JSON config file
-# Expects: ~/.config/botbot/config.json with key .llm[0].infomaniak and optional .ntfy
+# Expects: ~/.config/botbot/config.json with key .llm[0].infomaniak and optional .ntfy / .rss.token
 load_config() {
     local use_ntfy="$1"
+    local use_rss="${2:-false}"
 
     if [[ ! -f "${CONFIG_FILE}" ]]; then
         echo "Error: Config file not found at '${CONFIG_FILE}'." >&2
@@ -60,17 +63,30 @@ load_config() {
         fi
         NTFY_PASS="${ntfy_pass}"
     fi
+
+    # Extract the miniflux API token only if needed
+    if [[ "${use_rss}" == "true" ]]; then
+        local rss_token
+        rss_token=$(jq -r '.rss.token // empty' "${CONFIG_FILE}")
+        if [[ -z "${rss_token}" ]]; then
+            echo "Error: Could not read '.rss.token' from '${CONFIG_FILE}'." >&2
+            exit 1
+        fi
+        RSS_TOKEN="${rss_token}"
+    fi
 }
 
 # Function to validate inputs and files
-# Arguments: <use_ntfy> <use_irc> <user_message>
+# Arguments: <use_ntfy> <use_irc> <use_rss> <user_message>
 validate_inputs() {
     local use_ntfy="$1"
     local use_irc="$2"
-    local user_message="$3"
+    local use_rss="$3"
+    local user_message="$4"
 
-    if [[ -z "${user_message}" ]]; then
+    if [[ "${use_rss}" == "false" && -z "${user_message}" ]]; then
         echo "Usage: $0 [-ntfy|-irc] [-u <username>] \"Your question here\"" >&2
+        echo "       $0 -rss [-ntfy|-irc]" >&2
         exit 1
     fi
 
@@ -79,7 +95,7 @@ validate_inputs() {
         exit 1
     fi
 
-    if [[ ! -f "${ROLE_FILE}" ]]; then
+    if [[ "${use_rss}" == "false" && ! -f "${ROLE_FILE}" ]]; then
         echo "Error: Role file not found at '${ROLE_FILE}'." >&2
         echo "Please create a role.txt file in the script's directory." >&2
         exit 1
@@ -119,10 +135,11 @@ send_irc_message() {
 }
 
 # Parse command-line flags
-# Supports: -ntfy (send output to ntfy), -irc (send output to IRC), -u <username> (default: vlp)
+# Supports: -ntfy (send output to ntfy), -irc (send output to IRC), -rss (fetch & summarize RSS), -u <username> (default: vlp)
 parse_args() {
     USE_NTFY="false"
     USE_IRC="false"
+    USE_RSS="false"
     CURRENT_USER="vlp"
     USER_MESSAGE=""
 
@@ -136,6 +153,10 @@ parse_args() {
                 USE_IRC="true"
                 shift
                 ;;
+            -rss)
+                USE_RSS="true"
+                shift
+                ;;
             -u)
                 if [[ -z "${2:-}" ]]; then
                     echo "Error: -u requires a username argument." >&2
@@ -147,6 +168,7 @@ parse_args() {
             -*)
                 echo "Error: Unknown flag '$1'." >&2
                 echo "Usage: $0 [-ntfy|-irc] [-u <username>] \"Your question here\"" >&2
+                echo "       $0 -rss [-ntfy|-irc]" >&2
                 exit 1
                 ;;
             *)
@@ -158,12 +180,95 @@ parse_args() {
     done
 }
 
+# Fetch unread entries from the Miniflux RSS server
+# Returns a compact text list of title + URL for the LLM to summarize
+fetch_rss_entries() {
+    local entries
+    entries=$(curl -fsS \
+        -H "X-Auth-Token: ${RSS_TOKEN}" \
+        "${RSS_URL}/v1/entries?status=unread&limit=50&order=published_at&direction=desc")
+
+    if [[ -z "${entries}" ]]; then
+        echo "Error: Received empty response from Miniflux API." >&2
+        exit 1
+    fi
+
+    # Extract title + url pairs, one per line, as "- <title>: <url>"
+    printf '%s' "${entries}" | jq -r \
+        '.entries[] | "- \(.title): \(.url)"'
+}
+
+# Send RSS entries to the LLM and return a summarized digest
+summarize_rss() {
+    local entries_text="$1"
+
+    local prompt
+    prompt="Voici une liste d'articles RSS non lus. Fais-en un résumé concis en français, groupe les par thème si possible, et mets en avant les nouvelles les plus importantes :"$'\n\n'"${entries_text}"
+
+    local escaped_user
+    escaped_user=$(printf '%s' "${prompt}" | escape_json)
+
+    local response
+    response=$(curl -s -X POST \
+        -H "Authorization: ******" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"messages\": [
+                {
+                    \"role\": \"user\",
+                    \"content\": ${escaped_user}
+                }
+            ],
+            \"model\": \"${MODEL}\"
+        }" \
+        "${API_URL}")
+
+    if [[ -z "${response}" ]]; then
+        echo "Error: Received empty response from API." >&2
+        exit 1
+    fi
+
+    local answer
+    answer=$(printf '%s' "${response}" | jq -r '.choices[0].message.content // empty')
+
+    if [[ -z "${answer}" ]]; then
+        echo "Error: Could not extract answer from API response." >&2
+        echo "Raw response: ${response}" >&2
+        exit 1
+    fi
+
+    printf '%s' "${answer}"
+}
+
 # Main logic
 main() {
     check_deps
     parse_args "$@"
-    load_config "${USE_NTFY}"
-    validate_inputs "${USE_NTFY}" "${USE_IRC}" "${USER_MESSAGE}"
+    load_config "${USE_NTFY}" "${USE_RSS}"
+    validate_inputs "${USE_NTFY}" "${USE_IRC}" "${USE_RSS}" "${USER_MESSAGE}"
+
+    # RSS digest mode: fetch unread entries, summarize, dispatch
+    if [[ "${USE_RSS}" == "true" ]]; then
+        local entries
+        entries=$(fetch_rss_entries)
+
+        if [[ -z "${entries}" ]]; then
+            echo "No unread RSS entries found." >&2
+            exit 0
+        fi
+
+        local digest
+        digest=$(summarize_rss "${entries}")
+
+        if [[ "${USE_NTFY}" == "true" ]]; then
+            send_ntfy_alert "${digest}"
+        elif [[ "${USE_IRC}" == "true" ]]; then
+            send_irc_message "${digest}"
+        else
+            printf '%s\n' "${digest}"
+        fi
+        return
+    fi
 
     # Read the role from the file
     # We use cat to read the whole file content
