@@ -203,7 +203,7 @@ summarize_rss() {
     local entries_text="$1"
 
     local prompt
-    prompt="Voici une liste d'articles RSS non lus. Fais-en un résumé concis en français, groupe les par thème si possible, et mets en avant les nouvelles les plus importantes :"$'\n\n'"${entries_text}"
+    prompt="Voici une liste d'articles RSS non lus. Fais-en un résumé concis en français en moins de 300 caractères, groupe les par thème si possible, et mets en avant les nouvelles les plus importantes :"$'\n\n'"${entries_text}"
 
     local escaped_user
     escaped_user=$(printf '%s' "${prompt}" | escape_json)
