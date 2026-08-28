@@ -210,7 +210,7 @@ summarize_rss() {
 
     local response
     response=$(curl -s -X POST \
-        -H "Authorization: ******" \
+        -H "Authorization: Bearer ${API_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{
             \"messages\": [
