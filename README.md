@@ -54,7 +54,7 @@ The agent's personality and instructions are loaded from `role.txt`, located in 
 |-------------------|----------|--------------------------------------------------------------------|
 | `-ntfy`           | No       | Send the agent's reply to the configured ntfy topic instead of stdout |
 | `-irc`            | No       | Send the agent's reply to `irc.geeknode.org` in `#fdn` via `ii`   |
-| `-rss`            | No       | Fetch unread entries from the Miniflux server and send an LLM digest |
+| `-rss`            | No       | Fetch unread entries from the Miniflux server, send an LLM digest, then mark fetched feeds as read |
 | `-u <username>`   | No       | Identify yourself to the agent (default: `vlp`)                   |
 | `"message"`       | Yes*     | The message to send to the agent (*not required with `-rss`)       |
 

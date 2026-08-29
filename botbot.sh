@@ -181,7 +181,7 @@ parse_args() {
 }
 
 # Fetch unread entries from the Miniflux RSS server
-# Returns a compact text list of title + URL for the LLM to summarize
+# Returns the raw JSON payload from the API
 fetch_rss_entries() {
     local entries
     entries=$(curl -fsS \
@@ -193,9 +193,29 @@ fetch_rss_entries() {
         exit 1
     fi
 
-    # Extract title + url pairs, one per line, as "- <title>: <url>"
-    printf '%s' "${entries}" | jq -r \
+    printf '%s' "${entries}"
+}
+
+# Extract a compact text list of title + URL for the LLM to summarize
+format_rss_entries_for_summary() {
+    local entries_json="$1"
+
+    printf '%s' "${entries_json}" | jq -r \
         '.entries[] | "- \(.title): \(.url)"'
+}
+
+# Mark all fetched RSS feeds as read in Miniflux
+mark_rss_feeds_as_read() {
+    local entries_json="$1"
+    local feed_id
+
+    while IFS= read -r feed_id; do
+        [[ -n "${feed_id}" ]] || continue
+
+        curl -fsS -X PUT \
+            -H "X-Auth-Token: ${RSS_TOKEN}" \
+            "${RSS_URL}/v1/feeds/${feed_id}/mark-all-as-read" > /dev/null
+    done < <(printf '%s' "${entries_json}" | jq -r '.entries | map(.feed_id) | unique[]')
 }
 
 # Send RSS entries to the LLM and return a summarized digest
@@ -249,13 +269,16 @@ main() {
 
     # RSS digest mode: fetch unread entries, summarize, dispatch
     if [[ "${USE_RSS}" == "true" ]]; then
-        local entries
-        entries=$(fetch_rss_entries)
+        local entries_json
+        entries_json=$(fetch_rss_entries)
 
-        if [[ -z "${entries}" ]]; then
+        if [[ "$(printf '%s' "${entries_json}" | jq '.entries | length')" -eq 0 ]]; then
             echo "No unread RSS entries found." >&2
             exit 0
         fi
+
+        local entries
+        entries=$(format_rss_entries_for_summary "${entries_json}")
 
         local digest
         digest=$(summarize_rss "${entries}")
@@ -267,6 +290,8 @@ main() {
         else
             printf '%s\n' "${digest}"
         fi
+
+        mark_rss_feeds_as_read "${entries_json}"
         return
     fi
 
