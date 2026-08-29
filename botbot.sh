@@ -181,9 +181,7 @@ parse_args() {
 }
 
 # Fetch unread entries from the Miniflux RSS server
-# Outputs a compact text list of title + URL for the LLM to summarize
-# Also populates the global RSS_ENTRY_IDS variable with a JSON array of IDs
-RSS_ENTRY_IDS="[]"
+# Returns a compact text list of title + URL for the LLM to summarize
 fetch_rss_entries() {
     local entries
     entries=$(curl -fsS \
@@ -195,30 +193,9 @@ fetch_rss_entries() {
         exit 1
     fi
 
-    # Capture entry IDs for later mark-as-read call
-    RSS_ENTRY_IDS=$(printf '%s' "${entries}" | jq '[.entries[].id]')
-
     # Extract title + url pairs, one per line, as "- <title>: <url>"
     printf '%s' "${entries}" | jq -r \
         '.entries[] | "- \(.title): \(.url)"'
-}
-
-# Mark a set of Miniflux entries as read
-# Arguments: <json_array_of_ids>  e.g. '[1,2,3]'
-mark_entries_read() {
-    local ids_json="$1"
-
-    if [[ "${ids_json}" == "[]" ]]; then
-        return 0
-    fi
-
-    if ! curl -fsS -X PUT \
-        -H "X-Auth-Token: ${RSS_TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "{\"entry_ids\": ${ids_json}, \"status\": \"read\"}" \
-        "${RSS_URL}/v1/entries" > /dev/null; then
-        echo "Warning: Failed to mark RSS entries as read." >&2
-    fi
 }
 
 # Send RSS entries to the LLM and return a summarized digest
@@ -279,9 +256,6 @@ main() {
             echo "No unread RSS entries found." >&2
             exit 0
         fi
-
-        # Mark fetched entries as read so they won't be fetched again
-        mark_entries_read "${RSS_ENTRY_IDS}"
 
         local digest
         digest=$(summarize_rss "${entries}")
