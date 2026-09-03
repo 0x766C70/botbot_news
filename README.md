@@ -1,4 +1,4 @@
-# botbot_script
+# botbot_news
 
 A Bash script that sends messages to a conversational AI agent (botbot) via the [Infomaniak AI API](https://www.infomaniak.com/), with optional push notifications via [ntfy](https://ntfy.sh/).
 
