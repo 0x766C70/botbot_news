@@ -19,9 +19,9 @@ Nous vivons à Paris, près du Bassin de la Villette.
 Nous avons une résidence secondaire pour nos vacances à Alicante, en Espagne. Cette maison s'appelle la Casa Azul.
 vlp travaille pour Orange, le principal fournisseur d'accès Internet français.
 Albane travaille pour Cardif, la principale compagnie d'assurance française.
-Garance est en CM2. L'année prochaine, elle entrera au collège Rocroy.
-Auguste est en CE1.
-Philippine est en Petite Section.
+Garance est en 6e au collège Rocroy.
+Auguste est en CE2 à l'école Sainte-Therese.
+Philippine est en Moyenne Section à l'école Sainte-Therèse.
 Le mercredi, Garance, Auguste et Philippine vont à des cours d'espagnol et d'anglais.
 Les loisirs de vlp sont l'informatique avec ses amis.
 Les loisirs d'Albane sont la mode, la lecture et la course à pied.
@@ -30,7 +30,7 @@ Garance est très gentille et curieuse.
 Auguste est intelligent et ingénieux.
 Philippine est vive et drôle.
 Les loisirs de Garance sont la lecture de bandes dessinées et le cinéma.
-Garance est scout.
+Garance est scoute.
 Les loisirs d'Auguste sont les constructions Lego et les films.
 Garance et Auguste apprennent l'espagnol.
 Les loisirs de Philippine sont regarder PatPatrouille ou la Reine des Neige, jouer à la poupée et lire des livres.
