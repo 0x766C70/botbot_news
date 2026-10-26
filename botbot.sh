@@ -167,7 +167,13 @@ summarize_rss() {
     escaped_user=$(printf '%s' "${entries_text}" | escape_json)
 
     local model_field
-    if [[ -n "${AGENT_ID}" ]]; then
+    if [[ -n "${AGENT_ID}" && "${API_URL}" != */agents/* ]]; then
+        if [[ -z "${MODEL}" ]]; then
+            echo "Error: 'agent' requires an agents endpoint (e.g. https://api.mistral.ai/v1/agents/completions); otherwise define 'model'." >&2
+            exit 1
+        fi
+        model_field="\"model\": \"${MODEL}\""
+    elif [[ -n "${AGENT_ID}" ]]; then
         model_field="\"agent_id\": \"${AGENT_ID}\""
     else
         model_field="\"model\": \"${MODEL}\""
