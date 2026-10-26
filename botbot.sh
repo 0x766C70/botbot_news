@@ -266,7 +266,7 @@ main() {
 
     send_ntfy_alert "${digest}"
 
-    mark_rss_feeds_as_read "${entries_json}"
+    #mark_rss_feeds_as_read "${entries_json}"
 }
 
 main "$@"
