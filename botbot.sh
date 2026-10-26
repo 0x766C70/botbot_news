@@ -5,6 +5,7 @@ set -euo pipefail  # Exit on error, undefined vars, or pipe failures
 API_URL=""          # Populated by load_config
 API_TOKEN=""        # Populated by load_config
 MODEL=""            # Populated by load_config
+AGENT_ID=""         # Optional; populated by load_config
 LLM_NAME=""         # Selected with -llm; defaults to the first llm
 NTFY_URL="https://ntfy.766c70.com/botbot_talk"
 NTFY_USER="botbot"
@@ -58,8 +59,9 @@ load_config() {
     API_URL=$(printf '%s' "${llm}" | jq -r '.endpoint // empty')
     API_TOKEN=$(printf '%s' "${llm}" | jq -r '.api_key // empty')
     MODEL=$(printf '%s' "${llm}" | jq -r '.model // empty')
-    if [[ -z "${API_URL}" || -z "${API_TOKEN}" || -z "${MODEL}" ]]; then
-        echo "Error: LLM entry must define 'endpoint', 'api_key' and 'model'." >&2
+    AGENT_ID=$(printf '%s' "${llm}" | jq -r '.agent // empty')
+    if [[ -z "${API_URL}" || -z "${API_TOKEN}" ]] || [[ -z "${MODEL}" && -z "${AGENT_ID}" ]]; then
+        echo "Error: LLM entry must define 'endpoint', 'api_key' and 'model' (or 'agent')." >&2
         exit 1
     fi
 
@@ -162,10 +164,7 @@ summarize_rss() {
     local entries_text="$1"
 
     local prompt
-    prompt="### RÔLE
-Tu es un assistant de veille informative spécialisé dans la synthèse de flux RSS pour notifications mobiles (ntfy). Ta mission est de transformer une liste d'articles RSS en un message unique, concis et percutant.
-
-### CONTRAINTES CRITIQUES (NON NÉGOCIABLES)
+    prompt="### CONTRAINTES CRITIQUES (NON NÉGOCIABLES)
 1. LIMITE D'APERÇU (MONTRE) : Les 220 premiers caractères du message doivent contenir l'essentiel (titre du sujet principal ou résumé ultra-court). C'est ce qui sera lu sur la montre sans ouvrir le message. Si ce contenu dépasse 220 caractères, tu dois le résumer davantage et s'il n'atteint pas 220 caractères, tu peux ajouter un ou deux mots pour le rendre plus percutant et atteindre au moins les 180 caractères.
 2. LIMITE TOTALE (SYSTÈME) : La longueur totale du message ne doit JAMAIS dépasser 4096 octets (environ 4000 caractères). Si le contenu brut dépasse cette limite, tu dois tronquer ou résumer davantage les articles secondaires.
 3. FORMAT : Texte brut ou Markdown léger. Pas de balises HTML lourdes.
@@ -209,8 +208,20 @@ liens:
 ### INSTRUCTION FINALE
 Ne génère jamais de texte d'introduction ou de conclusion hors du format demandé (ex: \"Voici le résumé\"). Renvoie UNIQUEMENT le contenu de la notification prêt à être envoyé via ntfy."$'\n\n'"${entries_text}"
 
+    # With a defined agent, its own instructions apply: only send the entries
+    if [[ -n "${AGENT_ID}" ]]; then
+        prompt="${entries_text}"
+    fi
+
     local escaped_user
     escaped_user=$(printf '%s' "${prompt}" | escape_json)
+
+    local model_field
+    if [[ -n "${AGENT_ID}" ]]; then
+        model_field="\"agent_id\": \"${AGENT_ID}\""
+    else
+        model_field="\"model\": \"${MODEL}\""
+    fi
 
     local response
     response=$(curl -s -X POST \
@@ -223,7 +234,7 @@ Ne génère jamais de texte d'introduction ou de conclusion hors du format deman
                     \"content\": ${escaped_user}
                 }
             ],
-            \"model\": \"${MODEL}\"
+            ${model_field}
         }" \
         "${API_URL}")
 
