@@ -38,7 +38,7 @@ load_config() {
 
     if [[ ! -f "${CONFIG_FILE}" ]]; then
         echo "Error: Config file not found at '${CONFIG_FILE}'." >&2
-        echo "Please create it with your LLM token and optional ntfy password." >&2
+        echo "Please create it with your LLM token and ntfy password." >&2
         exit 1
     fi
 
