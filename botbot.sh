@@ -163,58 +163,8 @@ mark_rss_feeds_as_read() {
 summarize_rss() {
     local entries_text="$1"
 
-    local prompt
-    prompt="### CONTRAINTES CRITIQUES (NON NÉGOCIABLES)
-1. LIMITE D'APERÇU (MONTRE) : Les 220 premiers caractères du message doivent contenir l'essentiel (titre du sujet principal ou résumé ultra-court). C'est ce qui sera lu sur la montre sans ouvrir le message. Si ce contenu dépasse 220 caractères, tu dois le résumer davantage et s'il n'atteint pas 220 caractères, tu peux ajouter un ou deux mots pour le rendre plus percutant et atteindre au moins les 180 caractères.
-2. LIMITE TOTALE (SYSTÈME) : La longueur totale du message ne doit JAMAIS dépasser 4096 octets (environ 4000 caractères). Si le contenu brut dépasse cette limite, tu dois tronquer ou résumer davantage les articles secondaires.
-3. FORMAT : Texte brut ou Markdown léger. Pas de balises HTML lourdes.
-
-### STRUCTURE DU MESSAGE OBLIGATOIRE
-
-[PARTIE 1 : L'ACCROCHE - MAX 220 CARACTÈRES]
-- Doit résumer l'information la plus importante ou donner le ton du flux.
-- Doit être compréhensible seul.
-- Se termine idéalement par un saut de ligne pour séparer visuellement de la suite.
-
-[PARTIE 2 : LE DÉTAIL - POUR LE TÉLÉPHONE]
-- Liste numérotée des autres articles importants.
-- Format : \"1. Titre : Résumé en 1 phrase.\"
-- Inclure les liens courts si la place le permet (sinon, privilégier le texte).
-- S'arrêter immédiatement si la limite de 4096 octets est atteinte.
-
-### PROCÉDURE DE GÉNÉRATION
-1. Analyse tous les articles du flux RSS fourni.
-2. Identifie l'article le plus pertinent pour l'accroche.
-3. Rédige l'accroche (Partie 1) en comptant strictement les caractères (Max 220).
-4. Rédige les résumés des autres articles (Partie 2).
-5. CALCUL DE SÉCURITÉ : Vérifie la longueur totale du message.
-   - Si Longueur < 1500 caractères : développe un ou plusieurs sujet ou ajoute un commentaire de synthèse pour enrichir le message.
-   - Si Longueur > 3800 caractères (marge de sécurité pour les octets) : Réduis la longueur des résumés ou supprime les articles les moins pertinents jusqu'à respecter la limite indispensable.
-6. Génère le message final.
-
-### EXEMPLE DE SORTIE ATTENDUE
-
-[URGENT] Nouvelle réglementation européenne sur l'IA adoptée ce matin. Impact majeur pour les techs.
----
-1. Marchés : Le CAC40 rebondit de 2% suite à l'annonce.
-2. Tech : OpenAI publie un nouveau modèle plus efficace.
-3. Science : Découverte d'une exoplanète potentiellement habitable.
-
-liens:
-1. https://www.reference_news_1.com/article1
-2. https://www.reference_news_2.com/article2
-3. https://www.reference_news_3.com/article3
-
-### INSTRUCTION FINALE
-Ne génère jamais de texte d'introduction ou de conclusion hors du format demandé (ex: \"Voici le résumé\"). Renvoie UNIQUEMENT le contenu de la notification prêt à être envoyé via ntfy."$'\n\n'"${entries_text}"
-
-    # With a defined agent, its own instructions apply: only send the entries
-    if [[ -n "${AGENT_ID}" ]]; then
-        prompt="${entries_text}"
-    fi
-
     local escaped_user
-    escaped_user=$(printf '%s' "${prompt}" | escape_json)
+    escaped_user=$(printf '%s' "${entries_text}" | escape_json)
 
     local model_field
     if [[ -n "${AGENT_ID}" ]]; then
