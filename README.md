@@ -37,6 +37,8 @@ The script reads settings from `~/.config/botbot/config.json`. Several LLMs can 
 }
 ```
 
+An LLM entry may define an `agent` (agent ID, e.g. a Mistral agent with `endpoint` `https://api.mistral.ai/v1/agents/completions`) instead of `model`. The agent's own instructions are then used and only the RSS entries are sent.
+
 The script exits with an error if the config file is missing or incomplete.
 
 ## Usage
