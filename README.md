@@ -1,6 +1,6 @@
 # botbot_news
 
-A Bash script that sends messages to a conversational AI agent (botbot) via the [Infomaniak AI API](https://www.infomaniak.com/), with optional push notifications via [ntfy](https://ntfy.sh/).
+A Bash script that sends messages to a conversational AI agent (botbot) via the [Infomaniak AI API](https://www.infomaniak.com/) and delivers replies through [ntfy](https://ntfy.sh/).
 
 ## Requirements
 
@@ -8,8 +8,7 @@ A Bash script that sends messages to a conversational AI agent (botbot) via the 
 - [`curl`](https://curl.se/)
 - [`jq`](https://stedolan.github.io/jq/)
 - A valid [Infomaniak AI API token](https://manager.infomaniak.com/)
-- An ntfy server (only required if using the `-ntfy` flag)
-- `ii` (only required if using the `-irc` flag)
+- Access to the configured ntfy server
 
 ## Configuration
 
@@ -44,66 +43,33 @@ The agent's personality and instructions are loaded from `role.txt`, located in 
 ## Usage
 
 ```bash
-./botbot.sh [-ntfy|-irc] [-u <username>] "Your message here"
-./botbot.sh -rss [-ntfy|-irc]
+./botbot.sh "Your message here"
+./botbot.sh -rss
 ```
 
 ### Flags
 
-| Flag              | Required | Description                                                        |
-|-------------------|----------|--------------------------------------------------------------------|
-| `-ntfy`           | No       | Send the agent's reply to the configured ntfy topic instead of stdout |
-| `-irc`            | No       | Send the agent's reply to `irc.geeknode.org` in `#fdn` via `ii`   |
-| `-rss`            | No       | Fetch unread entries from the Miniflux server, send an LLM digest, then mark fetched feeds as read |
-| `-u <username>`   | No       | Identify yourself to the agent (default: `vlp`)                   |
-| `"message"`       | Yes*     | The message to send to the agent (*not required with `-rss`)       |
+| Argument    | Required | Description                                                        |
+|-------------|----------|--------------------------------------------------------------------|
+| `-rss`      | No       | Fetch unread entries from the Miniflux server, send an LLM digest, then mark fetched feeds as read |
+| `"message"` | Yes*     | The message to send to the agent (*not required with `-rss`)       |
 
 ### Output
 
-By default the script prints the agent's reply to stdout. With `-ntfy`, the reply is pushed to the configured ntfy topic instead. With `-irc`, the reply is written to the `ii` channel input at `~/irc/irc.geeknode.org/fdn/in`.
+The script always sends the agent's reply or RSS digest to the configured ntfy topic. The user is always identified to the agent as `vlp`.
 
 ## Examples
 
-**Ask a question as the default user:**
+**Ask a question:**
 
 ```bash
 ./botbot.sh "Quelle est la météo à Paris ?"
 ```
 
-**Ask a question as a specific user:**
-
-```bash
-./botbot.sh -u albane "Raconte-moi une blague."
-```
-
-**Send the reply to ntfy instead of stdout:**
-
-```bash
-./botbot.sh -ntfy -u garance "C'est quoi le programme ce soir ?"
-```
-
-**Send the reply to IRC (`#fdn` on `irc.geeknode.org`):**
-
-```bash
-./botbot.sh -irc -u garance "C'est quoi le programme ce soir ?"
-```
-
-**Fetch an RSS digest to stdout:**
+**Fetch an RSS digest and send it to ntfy:**
 
 ```bash
 ./botbot.sh -rss
-```
-
-**Fetch an RSS digest and push it to ntfy:**
-
-```bash
-./botbot.sh -rss -ntfy
-```
-
-**Fetch an RSS digest and post it to IRC:**
-
-```bash
-./botbot.sh -rss -irc
 ```
 
 ## License
