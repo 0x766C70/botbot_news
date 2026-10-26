@@ -25,9 +25,9 @@ The script reads settings from `~/.config/botbot/config.json`. Several LLMs can 
     },
     {
       "name": "mistral",
-      "endpoint": "https://api.mistral.ai/v1/chat/completions",
+      "endpoint": "https://api.mistral.ai/v1/agents/completions",
       "api_key": "your_mistral_api_key_here",
-      "model": "mistral-small-latest"
+      "agent": "your_mistral_agent_id_here"
     }
   ],
   "ntfy": "your_ntfy_password_here",
