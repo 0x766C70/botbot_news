@@ -2,9 +2,10 @@
 set -euo pipefail  # Exit on error, undefined vars, or pipe failures
 
 # Configuration
-API_URL="https://api.infomaniak.com/2/ai/108574/openai/v1/chat/completions"
+API_URL=""          # Populated by load_config
 API_TOKEN=""        # Populated by load_config
-MODEL="qwen3"
+MODEL=""            # Populated by load_config
+LLM_NAME=""         # Selected with -llm; defaults to the first llm
 NTFY_URL="https://ntfy.766c70.com/botbot_talk"
 NTFY_USER="botbot"
 NTFY_PASS=""        # Populated by load_config
@@ -13,9 +14,7 @@ RSS_URL="https://rss.766c70.com"
 RSS_TOKEN=""        # Populated by load_config
 
 # Resolve the directory where the script is located
-# This ensures role.txt is found even if you run the script from elsewhere
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROLE_FILE="${SCRIPT_DIR}/role.txt"
 
 sleep $((RANDOM % 31))m
 
@@ -32,24 +31,37 @@ check_deps() {
 }
 
 # Function to load credentials from the JSON config file
-# Expects: ~/.config/botbot/config.json with keys .llm[0].infomaniak, .ntfy, and optionally .rss.token
+# Expects: ~/.config/botbot/config.json with keys .llm[] (name, endpoint, api_key, model), .ntfy and .rss.token
 load_config() {
-    local use_rss="$1"
-
     if [[ ! -f "${CONFIG_FILE}" ]]; then
         echo "Error: Config file not found at '${CONFIG_FILE}'." >&2
-        echo "Please create it with your LLM token and ntfy password." >&2
+        echo "Please create it with your LLM settings and ntfy password." >&2
         exit 1
     fi
 
-    # Extract the Infomaniak API token; allow INFOMANIAK_AI_TOKEN env-var override
-    local token
-    token=$(jq -r '.llm[0].infomaniak // empty' "${CONFIG_FILE}")
-    if [[ -z "${token}" ]]; then
-        echo "Error: Could not read '.llm[0].infomaniak' from '${CONFIG_FILE}'." >&2
+    # Select the LLM by name; default to the first one
+    local llm
+    if [[ -n "${LLM_NAME}" ]]; then
+        llm=$(jq -c --arg n "${LLM_NAME}" '[.llm[]? | select(.name == $n)][0] // empty' "${CONFIG_FILE}")
+        if [[ -z "${llm}" ]]; then
+            echo "Error: LLM '${LLM_NAME}' not found in '${CONFIG_FILE}'." >&2
+            exit 1
+        fi
+    else
+        llm=$(jq -c '.llm[0]? // empty' "${CONFIG_FILE}")
+        if [[ -z "${llm}" ]]; then
+            echo "Error: No LLM defined in '.llm' of '${CONFIG_FILE}'." >&2
+            exit 1
+        fi
+    fi
+
+    API_URL=$(printf '%s' "${llm}" | jq -r '.endpoint // empty')
+    API_TOKEN=$(printf '%s' "${llm}" | jq -r '.api_key // empty')
+    MODEL=$(printf '%s' "${llm}" | jq -r '.model // empty')
+    if [[ -z "${API_URL}" || -z "${API_TOKEN}" || -z "${MODEL}" ]]; then
+        echo "Error: LLM entry must define 'endpoint', 'api_key' and 'model'." >&2
         exit 1
     fi
-    API_TOKEN="${INFOMANIAK_AI_TOKEN:-${token}}"
 
     local ntfy_pass
     ntfy_pass=$(jq -r '.ntfy // empty' "${CONFIG_FILE}")
@@ -59,35 +71,13 @@ load_config() {
     fi
     NTFY_PASS="${ntfy_pass}"
 
-    # Extract the miniflux API token only if needed
-    if [[ "${use_rss}" == "true" ]]; then
-        local rss_token
-        rss_token=$(jq -r '.rss.token // empty' "${CONFIG_FILE}")
-        if [[ -z "${rss_token}" ]]; then
-            echo "Error: Could not read '.rss.token' from '${CONFIG_FILE}'." >&2
-            exit 1
-        fi
-        RSS_TOKEN="${rss_token}"
-    fi
-}
-
-# Function to validate inputs and files
-# Arguments: <use_rss> <user_message>
-validate_inputs() {
-    local use_rss="$1"
-    local user_message="$2"
-
-    if [[ "${use_rss}" == "false" && -z "${user_message}" ]]; then
-        echo "Usage: $0 \"Your question here\"" >&2
-        echo "       $0 -rss" >&2
+    local rss_token
+    rss_token=$(jq -r '.rss.token // empty' "${CONFIG_FILE}")
+    if [[ -z "${rss_token}" ]]; then
+        echo "Error: Could not read '.rss.token' from '${CONFIG_FILE}'." >&2
         exit 1
     fi
-
-    if [[ "${use_rss}" == "false" && ! -f "${ROLE_FILE}" ]]; then
-        echo "Error: Role file not found at '${ROLE_FILE}'." >&2
-        echo "Please create a role.txt file in the script's directory." >&2
-        exit 1
-    fi
+    RSS_TOKEN="${rss_token}"
 }
 
 # Helper to escape JSON strings properly
@@ -108,27 +98,22 @@ send_ntfy_alert() {
 }
 
 # Parse command-line flags
-# Supports: -rss (fetch & summarize RSS); messages are sent to ntfy as vlp
+# Supports: -llm LLM_name (defaults to the first llm in the config)
 parse_args() {
-    USE_RSS="false"
-    USER_MESSAGE=""
-
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -rss)
-                USE_RSS="true"
-                shift
-                ;;
-            -*)
-                echo "Error: Unknown flag '$1'." >&2
-                echo "Usage: $0 \"Your question here\"" >&2
-                echo "       $0 -rss" >&2
-                exit 1
+            -llm)
+                if [[ $# -lt 2 || -z "$2" ]]; then
+                    echo "Error: -llm requires an LLM name." >&2
+                    exit 1
+                fi
+                LLM_NAME="$2"
+                shift 2
                 ;;
             *)
-                # Everything that's not a flag is the user message
-                USER_MESSAGE="$1"
-                shift
+                echo "Error: Unknown argument '$1'." >&2
+                echo "Usage: $0 [-llm LLM_name]" >&2
+                exit 1
                 ;;
         esac
     done
@@ -263,83 +248,25 @@ Ne génère jamais de texte d'introduction ou de conclusion hors du format deman
 main() {
     check_deps
     parse_args "$@"
-    load_config "${USE_RSS}"
-    validate_inputs "${USE_RSS}" "${USER_MESSAGE}"
+    load_config
 
-    # RSS digest mode: fetch unread entries, summarize, dispatch
-    if [[ "${USE_RSS}" == "true" ]]; then
-        local entries_json
-        entries_json=$(fetch_rss_entries)
+    local entries_json
+    entries_json=$(fetch_rss_entries)
 
-        if [[ "$(printf '%s' "${entries_json}" | jq '.entries | length')" -eq 0 ]]; then
-            echo "No unread RSS entries found." >&2
-            exit 0
-        fi
-
-        local entries
-        entries=$(format_rss_entries_for_summary "${entries_json}")
-
-        local digest
-        digest=$(summarize_rss "${entries}")
-
-        send_ntfy_alert "${digest}"
-
-        mark_rss_feeds_as_read "${entries_json}"
-        return
+    if [[ "$(printf '%s' "${entries_json}" | jq '.entries | length')" -eq 0 ]]; then
+        echo "No unread RSS entries found." >&2
+        exit 0
     fi
 
-    # Read the role from the file
-    # We use cat to read the whole file content
-    local system_prompt
-    system_prompt=$(cat "${ROLE_FILE}")
+    local entries
+    entries=$(format_rss_entries_for_summary "${entries_json}")
 
-    # Identify the user so the LLM knows who it's talking to
-    local full_message="[L'utilisateur qui te parle est vlp] ${USER_MESSAGE}"
+    local digest
+    digest=$(summarize_rss "${entries}")
 
-    # Escape both prompts to ensure valid JSON
-    # This handles newlines, quotes, and special characters safely
-    local escaped_system
-    local escaped_user
+    send_ntfy_alert "${digest}"
 
-    escaped_system=$(printf '%s' "${system_prompt}" | escape_json)
-    escaped_user=$(printf '%s' "${full_message}" | escape_json)
-
-    # Send the request
-    local response
-    response=$(curl -s -X POST \
-        -H "Authorization: Bearer ${API_TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"messages\": [
-                {
-                    \"role\": \"system\",
-                    \"content\": ${escaped_system}
-                },
-                {
-                    \"role\": \"user\",
-                    \"content\": ${escaped_user}
-                }
-            ],
-            \"model\": \"${MODEL}\"
-        }" \
-        "${API_URL}")
-
-    if [[ -z "${response}" ]]; then
-        echo "Error: Received empty response from API." >&2
-        exit 1
-    fi
-
-    # Extract the content
-    local answer
-    answer=$(printf '%s' "${response}" | jq -r '.choices[0].message.content // empty')
-
-    if [[ -z "${answer}" ]]; then
-        echo "Error: Could not extract answer. API might have returned an error." >&2
-        echo "Raw response: ${response}" >&2
-        exit 1
-    fi
-
-    send_ntfy_alert "${answer}"
+    mark_rss_feeds_as_read "${entries_json}"
 }
 
 main "$@"

@@ -1,24 +1,33 @@
 # botbot_news
 
-A Bash script that sends messages to a conversational AI agent (botbot) via the [Infomaniak AI API](https://www.infomaniak.com/) and delivers replies through [ntfy](https://ntfy.sh/).
+A Bash script that fetches unread RSS entries from a Miniflux server, summarizes them with an OpenAI-compatible LLM API (Infomaniak, Mistral, ...) and delivers the digest through [ntfy](https://ntfy.sh/).
 
 ## Requirements
 
 - `bash` (≥ 4)
 - [`curl`](https://curl.se/)
 - [`jq`](https://stedolan.github.io/jq/)
-- A valid [Infomaniak AI API token](https://manager.infomaniak.com/)
-- Access to the configured ntfy server
+- An API key for at least one LLM provider
+- Access to the configured ntfy and Miniflux servers
 
 ## Configuration
 
-The script reads credentials from `~/.config/botbot/config.json`. Create it with the following structure:
+The script reads settings from `~/.config/botbot/config.json`. Several LLMs can be defined; the first one is the default.
 
 ```json
 {
   "llm": [
     {
-      "infomaniak": "your_infomaniak_api_token_here"
+      "name": "infomaniak",
+      "endpoint": "https://api.infomaniak.com/2/ai/YOUR_PRODUCT_ID/openai/v1/chat/completions",
+      "api_key": "your_infomaniak_api_token_here",
+      "model": "qwen3"
+    },
+    {
+      "name": "mistral",
+      "endpoint": "https://api.mistral.ai/v1/chat/completions",
+      "api_key": "your_mistral_api_key_here",
+      "model": "mistral-small-latest"
     }
   ],
   "ntfy": "your_ntfy_password_here",
@@ -28,49 +37,20 @@ The script reads credentials from `~/.config/botbot/config.json`. Create it with
 }
 ```
 
-You can also override the Infomaniak token at runtime with the `INFOMANIAK_AI_TOKEN` environment variable:
-
-```bash
-export INFOMANIAK_AI_TOKEN="your_token_here"
-```
-
-The script will exit with an error if the config file is missing or incomplete.
-
-### Role file
-
-The agent's personality and instructions are loaded from `role.txt`, located in the same directory as the script. The script will exit with an error if this file is missing.
+The script exits with an error if the config file is missing or incomplete.
 
 ## Usage
 
 ```bash
-./botbot.sh "Your message here"
-./botbot.sh -rss
+./botbot.sh                 # uses the first LLM in config.json
+./botbot.sh -llm mistral    # uses the LLM named "mistral"
 ```
 
-### Flags
+| Argument         | Required | Description                                                  |
+|------------------|----------|--------------------------------------------------------------|
+| `-llm LLM_name`  | No       | Name of the LLM from `config.json`; defaults to the first one |
 
-| Argument    | Required | Description                                                        |
-|-------------|----------|--------------------------------------------------------------------|
-| `-rss`      | No       | Fetch unread entries from the Miniflux server, send an LLM digest, then mark fetched feeds as read |
-| `"message"` | Yes*     | The message to send to the agent (*not required with `-rss`)       |
-
-### Output
-
-The script always sends the agent's reply or RSS digest to the configured ntfy topic. The user is always identified to the agent as `vlp`.
-
-## Examples
-
-**Ask a question:**
-
-```bash
-./botbot.sh "Quelle est la météo à Paris ?"
-```
-
-**Fetch an RSS digest and send it to ntfy:**
-
-```bash
-./botbot.sh -rss
-```
+The script fetches unread entries, sends an LLM digest to the ntfy topic, then marks the fetched feeds as read.
 
 ## License
 
