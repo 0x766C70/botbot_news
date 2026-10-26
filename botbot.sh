@@ -16,7 +16,7 @@ RSS_TOKEN=""        # Populated by load_config
 # Resolve the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-sleep $((RANDOM % 31))m
+# sleep $((RANDOM % 31))m
 
 # Function to check dependencies
 check_deps() {
