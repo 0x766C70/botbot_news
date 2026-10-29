@@ -16,6 +16,14 @@ CONFIG_FILE="${HOME}/.config/botbot/config.json"
 RSS_URL="https://rss.766c70.com"
 RSS_TOKEN="" # Populated by load_config
 
+# Print a debug message to stderr when -d is set
+# Uses an explicit if to stay safe under set -e
+debug() {
+  if [[ -n "${DEBUG}" ]]; then
+    printf '%s\n' "$*" >&2
+  fi
+}
+
 # Resolve the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -280,11 +288,16 @@ main() {
     exit 0
   fi
 
+  local fetched_count
+  fetched_count=$(printf '%s' "${entries_json}" | jq '.entries | length')
+  debug "[debug] RSS entries fetched: ${fetched_count}"
+
   local entries
   entries=$(format_rss_entries_for_summary "${entries_json}")
 
   local digest
   digest=$(summarize_rss "${entries}")
+  debug "[debug] RSS entries summarized: ${fetched_count}"
 
   send_ntfy_alert "${digest}"
 
