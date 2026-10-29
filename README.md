@@ -44,13 +44,16 @@ The script exits with an error if the config file is missing or incomplete.
 ## Usage
 
 ```bash
-./botbot.sh                 # uses the first LLM in config.json
-./botbot.sh -llm mistral    # uses the LLM named "mistral"
+./botbot.sh Tech            # processes the "Tech" category, uses the first LLM in config.json
+./botbot.sh -llm mistral Tech   # processes the "Tech" category with the LLM named "mistral"
+./botbot.sh -d Tech         # debug mode: skips the randomized start delay
 ```
 
 | Argument         | Required | Description                                                  |
 |------------------|----------|--------------------------------------------------------------|
+| `category`       | Yes      | Name of the Miniflux category to fetch and summarize          |
 | `-llm LLM_name`  | No       | Name of the LLM from `config.json`; defaults to the first one |
+| `-d`             | No       | Debug mode: bypasses the randomized start delay               |
 
 The script fetches unread entries, sends an LLM digest to the ntfy topic, then marks the fetched feeds as read.
 

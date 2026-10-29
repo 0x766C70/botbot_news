@@ -7,6 +7,8 @@ API_TOKEN="" # Populated by load_config
 MODEL=""     # Populated by load_config
 AGENT_ID=""  # Optional; populated by load_config
 LLM_NAME=""  # Selected with -llm; defaults to the first llm
+CATEGORY=""  # Positional argument; the Miniflux category to process
+DEBUG=""     # Set with -d; bypasses the randomized start delay
 NTFY_URL="https://ntfy.766c70.com/botbot_talk"
 NTFY_USER="botbot"
 NTFY_PASS="" # Populated by load_config
@@ -17,7 +19,16 @@ RSS_TOKEN="" # Populated by load_config
 # Resolve the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-sleep $((RANDOM % 31))m
+# Detect -d before the randomized start delay, which parse_args has not run yet
+for arg in "$@"; do
+  if [[ "${arg}" == "-d" ]]; then
+    DEBUG=1
+  fi
+done
+
+if [[ -z "${DEBUG}" ]]; then
+  sleep $((RANDOM % 31))m
+fi
 
 # Function to check dependencies
 check_deps() {
@@ -101,9 +112,14 @@ send_ntfy_alert() {
 
 # Parse command-line flags
 # Supports: -llm LLM_name (defaults to the first llm in the config)
+# The category name is a required positional argument
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+    -d)
+      DEBUG=1
+      shift
+      ;;
     -llm)
       if [[ $# -lt 2 || -z "$2" ]]; then
         echo "Error: -llm requires an LLM name." >&2
@@ -112,22 +128,51 @@ parse_args() {
       LLM_NAME="$2"
       shift 2
       ;;
-    *)
+    -*)
       echo "Error: Unknown argument '$1'." >&2
-      echo "Usage: $0 [-llm LLM_name]" >&2
+      echo "Usage: $0 [-llm LLM_name] [-d] category" >&2
       exit 1
+      ;;
+    *)
+      if [[ -n "${CATEGORY}" ]]; then
+        echo "Error: Multiple categories given ('${CATEGORY}' and '$1')." >&2
+        exit 1
+      fi
+      CATEGORY="$1"
+      shift
       ;;
     esac
   done
 }
 
+# Resolve the Miniflux category ID from its name (case-insensitive)
+get_category_id() {
+  local category_name="$1"
+  local categories
+  categories=$(curl -fsS \
+    -H "X-Auth-Token: ${RSS_TOKEN}" \
+    "${RSS_URL}/v1/categories")
+
+  local category_id
+  category_id=$(printf '%s' "${categories}" | jq -r --arg n "${category_name}" \
+    '.[] | select((.title | ascii_downcase) == ($n | ascii_downcase)) | .id' | head -n1)
+
+  if [[ -z "${category_id}" ]]; then
+    echo "Error: Category '${category_name}' not found on the Miniflux server." >&2
+    exit 1
+  fi
+
+  printf '%s' "${category_id}"
+}
+
 # Fetch unread entries from the Miniflux RSS server
 # Returns the raw JSON payload from the API
 fetch_rss_entries() {
+  local category_id="$1"
   local entries
   entries=$(curl -fsS \
     -H "X-Auth-Token: ${RSS_TOKEN}" \
-    "${RSS_URL}/v1/entries?status=unread&limit=50&order=published_at&direction=desc")
+    "${RSS_URL}/v1/entries?status=unread&limit=50&order=published_at&direction=desc&category_id=${category_id}")
 
   if [[ -z "${entries}" ]]; then
     echo "Error: Received empty response from Miniflux API." >&2
@@ -145,18 +190,20 @@ format_rss_entries_for_summary() {
     '.entries[] | "- \(.title): \(.url)"'
 }
 
-# Mark all fetched RSS feeds as read in Miniflux
-mark_rss_feeds_as_read() {
+# Mark only the fetched RSS entries as read in Miniflux
+mark_entries_as_read() {
   local entries_json="$1"
-  local feed_id
+  local payload
+  payload=$(printf '%s' "${entries_json}" | jq -c '{status: "read", entry_ids: [.entries[].id]}')
 
-  while IFS= read -r feed_id; do
-    [[ -n "${feed_id}" ]] || continue
-
-    curl -fsS -X PUT \
-      -H "X-Auth-Token: ${RSS_TOKEN}" \
-      "${RSS_URL}/v1/feeds/${feed_id}/mark-all-as-read" >/dev/null
-  done < <(printf '%s' "${entries_json}" | jq -r '.entries | map(.feed_id) | unique[]')
+  if ! printf '%s' "${payload}" | curl -fsS -X PUT \
+    -H "X-Auth-Token: ${RSS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    --data-binary @- \
+    "${RSS_URL}/v1/entries" >/dev/null; then
+    echo "Error: Failed to mark entries as read." >&2
+    exit 1
+  fi
 }
 
 # Send RSS entries to the LLM and return a summarized digest
@@ -215,10 +262,18 @@ summarize_rss() {
 main() {
   check_deps
   parse_args "$@"
+  if [[ -z "${CATEGORY}" ]]; then
+    echo "Error: A category name is required." >&2
+    echo "Usage: $0 [-llm LLM_name] [-d] category" >&2
+    exit 1
+  fi
   load_config
 
+  local category_id
+  category_id=$(get_category_id "${CATEGORY}")
+
   local entries_json
-  entries_json=$(fetch_rss_entries)
+  entries_json=$(fetch_rss_entries "${category_id}")
 
   if [[ "$(printf '%s' "${entries_json}" | jq '.entries | length')" -eq 0 ]]; then
     echo "No unread RSS entries found." >&2
@@ -233,7 +288,7 @@ main() {
 
   send_ntfy_alert "${digest}"
 
-  mark_rss_feeds_as_read "${entries_json}"
+  mark_entries_as_read "${entries_json}"
 }
 
 main "$@"
